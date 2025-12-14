@@ -6,6 +6,16 @@ __pycache__/
 # C extensions
 *.so
 
+
+.env
+text
+yfm/
+yfm/*
+yfm
+.gitignore
+gitignore
+
+
 # Distribution / packaging
 .Python
 build/
