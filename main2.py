@@ -1,6 +1,6 @@
 """
 Gemini Live Audio + Camera/Screen Streaming
-Sinhala Radio Announcer (Reggie) – OPTIMIZED & FIXED
+Sinhala Radio Announcer (Reggie) – ULTRA LOW LATENCY
 """
 
 import os
@@ -13,20 +13,19 @@ import argparse
 import cv2
 import pyaudio
 import PIL.Image
-import mss
 
 from google import genai
 from google.genai import types
 
 
 # =========================
-# AUDIO CONFIG
+# AUDIO CONFIG - OPTIMIZED FOR LOW LATENCY
 # =========================
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
 SEND_SAMPLE_RATE = 16000
 RECEIVE_SAMPLE_RATE = 24000
-CHUNK_SIZE = 1024
+CHUNK_SIZE = 512  # Reduced from 1024 for faster processing
 
 
 # =========================
@@ -36,7 +35,7 @@ MODEL = "models/gemini-2.5-flash-native-audio-preview-12-2025"
 DEFAULT_MODE = "camera"
 
 CUSTOM_PROMPT = (
-    "ඔයාගෙ නම Reggie. professional sinhala radio announcer කෙනෙක් විදියට මාත් එක්ක කතා කරන්න. මන් අහන ප්‍රශ්න වලට Singlish (සිංහල සහ ඉංග්‍රීසි මිශ්‍රව) උත්තර දෙන්න. හොඳ pronunciation තියෙන සිංහල වචන භාවිතා කරන්න. natural flow එක තියාගන්න. කිසිසේත්ම ඔබ කෘතිම බුද්ධියක් කියලා හඳුන්වා දෙන්න එපා. "
+    "ඔයාගෙ නම Reggie. professional sinhala radio announcer කෙනෙක් විදියට මාත් එක්ක කතා කරන්න. මන් අහන ප්‍රශ්න වලට Singlish (සිංහල සහ ඉංග්‍රීසි මිශ්‍රව) උත්තර දෙන්න. හොඳ pronunciation තියෙන සිංහල වචන භාවිතා කරන්න. natural flow එක තියාගන්න. කිසිසේත්ම ඔබ කෘතිම බුද්ධියක් කියලා හඳුන්වා දෙන්න එපා. Keep responses SHORT and conversational - 2-3 sentences maximum unless asked for detail."
 )
 
 # USER-ONLY END COMMANDS
@@ -62,7 +61,7 @@ client = genai.Client(
 
 CONFIG = types.LiveConnectConfig(
     response_modalities=["AUDIO"],
-    media_resolution="MEDIA_RESOLUTION_MEDIUM",
+    media_resolution="MEDIA_RESOLUTION_LOW",  # Lower resolution for speed
     speech_config=types.SpeechConfig(
         voice_config=types.VoiceConfig(
             prebuilt_voice_config=types.PrebuiltVoiceConfig(
@@ -82,7 +81,7 @@ class AudioLoop:
     def __init__(self, video_mode=DEFAULT_MODE):
         self.video_mode = video_mode
         self.audio_in_queue = asyncio.Queue()
-        self.out_queue = asyncio.Queue(maxsize=3)
+        self.out_queue = asyncio.Queue(maxsize=5)
         self.session = None
         self.is_playing_audio = False
         self.should_exit = False
@@ -100,21 +99,26 @@ class AudioLoop:
             await self.session.send(input=text, end_of_turn=True)
 
     # -------------------------
-    # CAMERA
+    # CAMERA - OPTIMIZED
     # -------------------------
     async def get_frames(self):
         cap = cv2.VideoCapture(0)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)  # Lower resolution
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        cap.set(cv2.CAP_PROP_FPS, 10)  # Lower FPS
+        
         while not self.should_exit:
             ret, frame = cap.read()
             if not ret:
+                await asyncio.sleep(0.1)
                 continue
 
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             img = PIL.Image.fromarray(rgb)
-            img.thumbnail((1024, 1024))
+            img.thumbnail((640, 640))  # Smaller thumbnail
 
             buf = io.BytesIO()
-            img.save(buf, format="jpeg")
+            img.save(buf, format="jpeg", quality=60)  # Lower quality for speed
             buf.seek(0)
 
             await self.out_queue.put({
@@ -122,7 +126,7 @@ class AudioLoop:
                 "data": base64.b64encode(buf.read()).decode()
             })
 
-            await asyncio.sleep(3.0)  # 🔥 reduced rate
+            await asyncio.sleep(4.0)  # Reduced frame rate
 
         cap.release()
 
@@ -135,7 +139,7 @@ class AudioLoop:
             await self.session.send(input=msg)
 
     # -------------------------
-    # MICROPHONE
+    # MICROPHONE - OPTIMIZED
     # -------------------------
     async def listen_audio(self):
         mic_info = pya.get_default_input_device_info()
@@ -150,7 +154,7 @@ class AudioLoop:
 
         while not self.should_exit:
             if self.is_playing_audio:
-                await asyncio.sleep(0.02)
+                await asyncio.sleep(0.005)  # Reduced from 0.02
                 continue
 
             data = await asyncio.to_thread(
@@ -178,7 +182,7 @@ class AudioLoop:
                     print(response.text, end="", flush=True)
 
     # -------------------------
-    # PLAY AUDIO
+    # PLAY AUDIO - OPTIMIZED
     # -------------------------
     async def play_audio(self):
         stream = pya.open(
@@ -218,7 +222,7 @@ class AudioLoop:
                     tg.create_task(self.get_frames())
 
                 while not self.should_exit:
-                    await asyncio.sleep(0.1)
+                    await asyncio.sleep(0.05)  # Reduced from 0.1
 
         except ExceptionGroup as e:
             traceback.print_exception(e)
